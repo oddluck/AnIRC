@@ -39,8 +39,12 @@ namespace AnIRC {
         public event EventHandler<AwayMessageEventArgs> AwayMessage;
         /// <summary>Raised when the local user is marked as away.</summary>
         public event EventHandler<AwayEventArgs> AwaySet;
-        /// <summary>Raised when a user describes an action on a channel.</summary>
-        public event EventHandler<ChannelMessageEventArgs> ChannelAction;
+		/// <summary>Raised when new IRCv3 capabilities become available.</summary>
+		public event EventHandler<CapabilitiesAddedEventArgs> CapabilitiesAdded;
+		/// <summary>Raised when IRCv3 capabilities become unavailable.</summary>
+		public event EventHandler<CapabilitiesEventArgs> CapabilitiesDeleted;
+		/// <summary>Raised when a user describes an action on a channel.</summary>
+		public event EventHandler<ChannelMessageEventArgs> ChannelAction;
         /// <summary>Raised when a user gains administrator status (+a) on a channel.</summary>
         public event EventHandler<ChannelStatusChangedEventArgs> ChannelAdmin;
         /// <summary>Raised when a ban is set (+b) on a channel.</summary>
@@ -233,7 +237,9 @@ namespace AnIRC {
         protected internal virtual void OnAwayCancelled(AwayEventArgs e) => this.AwayCancelled?.Invoke(this, e);
         protected internal virtual void OnAwayMessage(AwayMessageEventArgs e) => this.AwayMessage?.Invoke(this, e);
         protected internal virtual void OnAwaySet(AwayEventArgs e) => this.AwaySet?.Invoke(this, e);
-        protected internal virtual void OnBanList(ChannelModeListEventArgs e) => this.ChannelBanList?.Invoke(this, e);
+		protected internal virtual void OnCapabilitiesAdded(CapabilitiesAddedEventArgs e) => this.CapabilitiesAdded?.Invoke(this, e);
+		protected internal virtual void OnCapabilitiesDeleted(CapabilitiesEventArgs e) => this.CapabilitiesDeleted?.Invoke(this, e);
+		protected internal virtual void OnBanList(ChannelModeListEventArgs e) => this.ChannelBanList?.Invoke(this, e);
         protected internal virtual void OnBanListEnd(ChannelModeListEndEventArgs e) => this.ChannelBanListEnd?.Invoke(this, e);
         protected internal virtual void OnChannelAction(ChannelMessageEventArgs e) => this.ChannelAction?.Invoke(this, e);
         protected internal virtual void OnChannelAdmin(ChannelStatusChangedEventArgs e) => this.ChannelAdmin?.Invoke(this, e);
@@ -284,7 +290,9 @@ namespace AnIRC {
             this.Channels.Clear();
             this.Users.Clear();
             this.UserModes.Clear();
-            this.Disconnected?.Invoke(this, e);
+			this.supportedCapabilities.Clear();
+			this.enabledCapabilities.Clear();
+			this.Disconnected?.Invoke(this, e);
 
             // Fail async requests.
             this.asyncRequestTimer?.Stop();
@@ -377,11 +385,17 @@ namespace AnIRC {
         /// <summary>Returns or sets a value indicating whether a connection will be abandoned if SASL authentication is unsuccessful.</summary>
         public bool RequireSaslAuthentication { get; set; }
 
-        /// <summary>/Provides access to RPL_ISUPPORT extensions supported by the server.</summary>
+        /// <summary>Provides access to RPL_ISUPPORT extensions supported by the server.</summary>
         public IrcExtensions Extensions { get; protected internal set; }
+		internal Dictionary<string, IrcCapability> supportedCapabilities = new Dictionary<string, IrcCapability>();
+		/// <summary>Returns the set of IRCv3 capabilities supported by the server.</summary>
+		public ReadOnlyDictionary<string, IrcCapability> SupportedCapabilities { get; }
+		internal Dictionary<string, IrcCapability> enabledCapabilities = new Dictionary<string, IrcCapability>();
+		/// <summary>Returns the set of IRCv3 capabilities currently enabled.</summary>
+		public ReadOnlyDictionary<string, IrcCapability> EnabledCapabilities { get; }
 
-        /// <summary>A <see cref="StringComparer"/> that emulates the comparison the server uses, as specified in the RPL_ISUPPORT message.</summary>
-        public IrcStringComparer CaseMappingComparer { get; protected internal set; } = IrcStringComparer.RFC1459;
+		/// <summary>A <see cref="StringComparer"/> that emulates the comparison the server uses, as specified in the RPL_ISUPPORT message.</summary>
+		public IrcStringComparer CaseMappingComparer { get; protected internal set; } = IrcStringComparer.RFC1459;
 
         /// <summary>The time we last sent a PRIVMSG.</summary>
         public DateTime LastSpoke { get; protected internal set; }
@@ -456,7 +470,9 @@ namespace AnIRC {
             if (localUser == null) throw new ArgumentNullException(nameof(localUser));
             if (localUser.Client != null && localUser.Client != this) throw new ArgumentException("The " + nameof(IrcLocalUser) + " object is already bound to another " + nameof(IrcClient) + ".", nameof(localUser));
 
-            this.Extensions = new IrcExtensions(this, networkName);
+			this.Extensions = new IrcExtensions(this, networkName);
+			this.SupportedCapabilities = new ReadOnlyDictionary<string, IrcCapability>(this.supportedCapabilities);
+			this.EnabledCapabilities = new ReadOnlyDictionary<string, IrcCapability>(this.enabledCapabilities);
             this.Users = new IrcUserCollection(this);
             this.Encoding = encoding ?? new UTF8Encoding(false, false);
             this.AsyncRequests = this.asyncRequests.AsReadOnly();
@@ -640,7 +656,7 @@ namespace AnIRC {
         protected virtual void Register() {
             if (this.Password != null)
                 this.Send("PASS :" + this.Password);
-            this.Send("CAP LS");
+            this.Send("CAP LS 302");
             this.Send("NICK " + Me.Nickname);
             this.Send("USER " + Me.Ident + " 4 * :" + Me.FullName);
         }

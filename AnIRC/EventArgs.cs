@@ -28,7 +28,26 @@ namespace AnIRC {
         }
     }
 
-    public class ChannelChangeEventArgs : EventArgs {
+	public class CapabilitiesEventArgs : EventArgs {
+		/// <summary>A set of capabilities that are available.</summary>
+		public ReadOnlyDictionary<string, IrcCapability> Capabilities { get; }
+
+		public CapabilitiesEventArgs(IDictionary<string, IrcCapability> capabilities) {
+			this.Capabilities = new ReadOnlyDictionary<string, IrcCapability>(capabilities);
+		}
+	}
+
+	public class CapabilitiesAddedEventArgs : CapabilitiesEventArgs {
+		/// <summary>A set of names of capabilities that should be enabled.</summary>
+		public HashSet<string> EnableCapabilities { get; }
+
+		public CapabilitiesAddedEventArgs(IDictionary<string, IrcCapability> capabilities, HashSet<string> enableCapabilities)
+			: base(capabilities) {
+			this.EnableCapabilities = enableCapabilities;
+		}
+	}
+
+	public class ChannelChangeEventArgs : EventArgs {
 		/// <summary>Returns an <see cref="IrcUser"/> object representing the user who made the change.</summary>
         public IrcUser Sender { get; set; }
 		/// <summary>Returns an <see cref="IrcChannel"/> object representing the channel that is affected.</summary>

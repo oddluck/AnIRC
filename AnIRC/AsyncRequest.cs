@@ -284,7 +284,7 @@ namespace AnIRC {
                 // Error replies
                 { ERR_NOSUCHSERVER, true },
                 { ERR_NONICKNAMEGIVEN, true },
-                { ERR_NOSUCHNICK, false }
+                { ERR_NOSUCHNICK, true }
             };
 
             private IrcClient client;
@@ -348,7 +348,7 @@ namespace AnIRC {
                         if (response.Nickname != null) {
                             this.taskSource.SetResult(response);
                         } else if (error != null) {
-                            this.taskSource.SetException(new AsyncRequestErrorException(error));
+                            this.taskSource.SetException(new AsyncRequestErrorException(line));
                         } else {
                             this.taskSource.SetException(new IOException("The server did not send any response."));
                         }

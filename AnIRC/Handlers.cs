@@ -600,48 +600,79 @@ namespace AnIRC {
         public static void HandleCap(IrcClient client, IrcLine line) {
             string subcommand = line.Parameters[1];
             switch (subcommand.ToUpperInvariant()) {
-                case "LS":
-                    if (client.State < IrcClientState.ReceivingServerInfo) {
-                        bool sasl = false;
-                        List<string> supportedCapabilities = new List<string>();
-                        MatchCollection matches = Regex.Matches(line.Parameters[2], @"\G *(-)?(~)?(=)?([^ ]+)");
-                        foreach (Match match in matches) {
-                            if (match.Groups[4].Value == "multi-prefix" ||
-                                match.Groups[4].Value == "extended-join" ||
-                                match.Groups[4].Value == "account-notify") {
+				case "LS":
+				case "NEW":
+					Dictionary<string, IrcCapability> newCapabilities = new Dictionary<string, IrcCapability>();
+					HashSet<string> enableCapabilities = new HashSet<string>();
 
-                                if (!supportedCapabilities.Contains(match.Groups[4].Value))
-                                    supportedCapabilities.Add(match.Groups[4].Value);
-                            } else if (client.SaslUsername != null && match.Groups[4].Value == "sasl") {
-                                sasl = true;
-                                if (!supportedCapabilities.Contains(match.Groups[4].Value))
-                                    supportedCapabilities.Add(match.Groups[4].Value);
-                            }
-                        }
+					string[] fields = (line.Parameters[2] == "*" ? line.Parameters[3] : line.Parameters[2]).Split(' ');
+					foreach (string field in fields) {
+						bool sticky = false, ackRequired = false;
+						for (int i = 0; i < field.Length; ++i) {
+							if (field[i] == '-') {
+							} else if (field[i] == '=')
+								sticky = true;
+							else if (field[i] == '~')
+								ackRequired = true;
+							else {
+								int pos = field.IndexOf('=', i);
 
-                        if (client.RequireSaslAuthentication && !sasl) {
-                            client.disconnectReason = DisconnectReason.SaslAuthenticationFailed;
-                            client.Send("QUIT :SASL is not supported.");
-                        } else if (supportedCapabilities.Count > 0)
-                            client.Send("CAP REQ :" + string.Join(" ", supportedCapabilities));
-                        else
-                            client.Send("CAP END");
-                    }
+								IrcCapability cap;
+								if (pos == -1) cap = new IrcCapability(field.Substring(i), sticky, ackRequired);
+								else cap = new IrcCapability(field.Substring(i, pos - i), field.Substring(i + 1), sticky, ackRequired);
 
-                    break;
+								if (!client.SupportedCapabilities.ContainsKey(cap.Name)) {
+									client.supportedCapabilities.Add(cap.Name, cap);
+									newCapabilities.Add(cap.Name, cap);
+									if (cap.Name == "account-notify" || cap.Name == "away-notify" || cap.Name == "cap-notify" ||
+										cap.Name == "extended-join" || cap.Name == "multi-prefix")
+										enableCapabilities.Add(cap.Name);
+									else if (cap.Name == "sasl" && (cap.Parameter == null || cap.Parameter.Split(',').Contains("PLAIN")))
+										enableCapabilities.Add(cap.Name);
+								}
+
+								break;
+							}
+						}
+					}
+					break;
                 case "ACK":
-                    if (client.State < IrcClientState.ReceivingServerInfo &&
-                        Regex.IsMatch(line.Parameters[2], @"(?<![^ ])[-~=]*sasl(?![^ ])") && client.SaslUsername != null) {
-                        // TODO: SASL authentication
-                        client.Send("AUTHENTICATE PLAIN");
-                    } else
-                        client.Send("CAP END");
-                    break;
+					Dictionary<string, IrcCapability> capabilities = new Dictionary<string, IrcCapability>();
+
+					fields = (line.Parameters[2] == "*" ? line.Parameters[3] : line.Parameters[2]).Split(' ');
+					foreach (string field in fields) {
+						IrcCapability cap;
+						if (client.SupportedCapabilities.TryGetValue(field, out cap)) {
+							client.enabledCapabilities[field] = cap;
+							capabilities.Add(field, cap);
+						}
+					}
+
+					if (client.State < IrcClientState.ReceivingServerInfo) {
+						if (Regex.IsMatch(line.Parameters[2], @"(?<![^ ])[-~=]*sasl(?![^ ])") && client.SaslUsername != null)
+							// TODO: SASL authentication
+							client.Send("AUTHENTICATE PLAIN");
+						else
+							client.Send("CAP END");
+					}
+					break;
                 case "NAK":
                     if (client.State < IrcClientState.ReceivingServerInfo)
                         client.Send("CAP END");
                     break;
-            }
+				case "DEL":
+					capabilities = new Dictionary<string, IrcCapability>();
+					fields = (line.Parameters[2] == "*" ? line.Parameters[3] : line.Parameters[2]).Split(' ');
+					foreach (string field in fields) {
+						IrcCapability cap;
+						if (client.SupportedCapabilities.TryGetValue(field, out cap)) {
+							client.supportedCapabilities.Remove(field);
+							client.enabledCapabilities.Remove(field);
+							capabilities.Add(field, cap);
+						}
+					}
+					break;
+			}
         }
 
         [IrcMessageHandler("CHGHOST")]

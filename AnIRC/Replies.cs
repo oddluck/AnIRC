@@ -1,4 +1,4 @@
-﻿namespace AnIRC {
+namespace AnIRC {
     /// <summary>Contains constants representing standard IRC reply numerics.</summary>
     public static class Replies {
         // Standard IRC replies, defined in RFC 2812.
