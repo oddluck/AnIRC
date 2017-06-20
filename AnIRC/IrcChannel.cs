@@ -1,11 +1,12 @@
 ﻿using System;
+using System.ComponentModel;
 using System.Text;
 
 namespace AnIRC {
     /// <summary>
     /// Represents an IRC channel.
     /// </summary>
-    public class IrcChannel : IrcMessageTarget {
+    public class IrcChannel : IrcMessageTarget, INotifyPropertyChanged {
         public override IrcClient Client { get; }
 
         public override string Target => this.Name;
@@ -13,22 +14,46 @@ namespace AnIRC {
         /// <summary>The name of the channel.</summary>
         public string Name { get; }
         /// <summary>The modes on the channel.</summary>
-        public virtual ModeSet Modes { get; internal set; } = new ModeSet();
+        public virtual ModeSet Modes { get; } = new ModeSet();
 
+        private DateTime timestamp;
         /// <summary>The time the channel was created.</summary>
-        public DateTime Timestamp { get; internal set; }
+        public DateTime Timestamp {
+            get => this.timestamp;
+            set { this.timestamp = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Timestamp))); }
+        }
+        private string topic;
         /// <summary>The channel topic, or null if none is set.</summary>
-        public string Topic { get; internal set; }
+        public string Topic {
+            get => this.topic;
+            set { this.topic = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Topic))); }
+        }
+        private string topicSetter;
         /// <summary>The name or hostmask of the user who set the topic (whichever the server decided to send).</summary>
-        public string TopicSetter { get; internal set; }
+        public string TopicSetter {
+            get => this.topicSetter;
+            set { this.topicSetter = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(TopicSetter))); }
+        }
+        private DateTime topicStamp;
         /// <summary>The time the topic was last changed.</summary>
-        public DateTime TopicStamp { get; internal set; }
+        public DateTime TopicStamp {
+            get => this.topicStamp;
+            set { this.topicStamp = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(TopicStamp))); }
+        }
         /// <summary>The users on the channel.</summary>
         public IrcChannelUserCollection Users { get; internal set; }
+        private int userLimit;
         /// <summary>The maximum number of users that can join the channel, or int.MaxValue if no limit is set.</summary>
-        public int UserLimit { get; internal set; } = int.MaxValue;
+        public int UserLimit {
+            get => this.userLimit;
+            set { this.userLimit = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(UserLimit))); }
+        }
+        private string key;
         /// <summary>The key to the channel, or null if none is set.</summary>
-        public string Key { get; internal set; }
+        public string Key {
+            get => this.key;
+            set { this.key = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Key))); }
+        }
 
         /// <summary>Returns the <see cref="IrcChannelUser"/> representing the local user, or null if we aren't in the list.</summary>
         public IrcChannelUser Me {
@@ -52,13 +77,16 @@ namespace AnIRC {
             this.Name = name;
         }
 
-        /// <summary>
-        /// Sets a list mode or status mode (v, o, b, e, etc.) on one or more users on the channel.
-        /// </summary>
-        /// <param name="direction">The direction of the mode change; '+' or '-'.</param>
-        /// <param name="mode">The channel mode to change.</param>
-        /// <param name="members">The users to affect.</param>
-        public void SetMode(char direction, char mode, params string[] members) {
+		public event PropertyChangedEventHandler PropertyChanged;
+		internal void OnPropertyChanged(PropertyChangedEventArgs e) => this.PropertyChanged?.Invoke(this, e);
+
+		/// <summary>
+		/// Sets a list mode or status mode (v, o, b, e, etc.) on one or more users on the channel.
+		/// </summary>
+		/// <param name="direction">The direction of the mode change; '+' or '-'.</param>
+		/// <param name="mode">The channel mode to change.</param>
+		/// <param name="members">The users to affect.</param>
+		public void SetMode(char direction, char mode, params string[] members) {
             StringBuilder builder1 = new StringBuilder();
             StringBuilder builder2 = new StringBuilder();
             int i = 0; int count;

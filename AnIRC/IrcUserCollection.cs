@@ -52,7 +52,10 @@ namespace AnIRC {
                 if (fullName != null) user.FullName = fullName;
             } else {
                 user = new IrcUser(this.Client, nickname, ident, host, (account == "*" ? null : account), fullName);
-                if (add) this.Add(user);
+				if (add) {
+					this.Add(user);
+					this.Client.OnUserAppeared(new IrcUserEventArgs(user));
+				}
             }
 
             return user;

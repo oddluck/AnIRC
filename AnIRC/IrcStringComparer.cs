@@ -21,13 +21,23 @@ namespace AnIRC {
         private char maxLowercase;
 
         /// <summary>Returns a <see cref="StringComparer"/> that makes case-insensitive comparisons using the ASCII case mapping.</summary>
-        public static IrcStringComparer ASCII => new IrcStringComparer(CaseMappingMode.ASCII);
+        public static IrcStringComparer ASCII { get; } = new IrcStringComparer(CaseMappingMode.ASCII);
         /// <summary>Returns a <see cref="StringComparer"/> that makes case-insensitive comparisons using the RFC 1459 case mapping.</summary>
-        public static IrcStringComparer RFC1459 => new IrcStringComparer(CaseMappingMode.RFC1459);
+        public static IrcStringComparer RFC1459 { get; } = new IrcStringComparer(CaseMappingMode.RFC1459);
         /// <summary>Returns a <see cref="StringComparer"/> that makes case-insensitive comparisons using the strict RFC 1459 case mapping.</summary>
-        public static IrcStringComparer StrictRFC1459 => new IrcStringComparer(CaseMappingMode.StrictRFC1459);
+        public static IrcStringComparer StrictRFC1459 { get; } = new IrcStringComparer(CaseMappingMode.StrictRFC1459);
 
-        internal IrcStringComparer(CaseMappingMode mode) {
+		/// <summary>Returns a <see cref="StringComparer"/> that makes case-insensitive comparisons using the specified rule.</summary>
+		public static IrcStringComparer GetComparer(CaseMappingMode mode) {
+			switch (mode) {
+				case CaseMappingMode.ASCII: return IrcStringComparer.ASCII;
+				case CaseMappingMode.RFC1459: return IrcStringComparer.RFC1459;
+				case CaseMappingMode.StrictRFC1459: return IrcStringComparer.StrictRFC1459;
+				default: throw new ArgumentException(nameof(mode) + " is not a valid case mapping mode.", nameof(mode));
+			}
+		}
+
+		internal IrcStringComparer(CaseMappingMode mode) {
             switch (mode) {
                 case CaseMappingMode.ASCII:
                     maxUppercase = 'Z';

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,36 +10,79 @@ namespace AnIRC {
     /// <summary>
     /// Represents a user on IRC.
     /// </summary>
-    public class IrcUser : IrcMessageTarget {
+    public class IrcUser : IrcMessageTarget, INotifyPropertyChanged {
         /// <summary>Returns the <see cref="IrcClient"/> that this user belongs to.</summary>
         public override IrcClient Client { get; }
 
         /// <summary>Returns the user's nickname.</summary>
         public override string Target => this.Nickname;
 
-        /// <summary>The user's nickname.</summary>
-        public string Nickname { get; protected internal set; }
-        /// <summary>The user's ident username.</summary>
-        public string Ident { get; protected internal set; }
-        /// <summary>The user's displayed host.</summary>
-        public string Host { get; protected internal set; }
-        /// <summary>The user's account name.</summary>
-        public string Account { get; set; }
-
-        /// <summary>The user's full name.</summary>
-        public string FullName { get; protected internal set; }
-        /// <summary>The user's gender, if they have it set.</summary>
-        public Gender Gender { get; set; }
+		private string nickname;
+        /// <summary>Returns the user's nickname.</summary>
+        public string Nickname {
+			get => this.nickname;
+			protected internal set { this.nickname = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Nickname))); }
+		}
+		private string ident;
+		/// <summary>The user's ident username.</summary>
+		public string Ident {
+			get => this.ident;
+			protected internal set { this.ident = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Ident))); }
+		}
+		private string host;
+		/// <summary>The user's displayed host.</summary>
+		public string Host {
+			get => this.host;
+			protected internal set { this.host = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Host))); }
+		}
+		private string account;
+		/// <summary>The user's account name.</summary>
+		public string Account {
+			get => this.account;
+			protected internal set { this.account = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Account))); }
+		}
+		private string fullName;
+		/// <summary>The user's full name, also known as the 'real name' or 'gecos' field..</summary>
+		public string FullName {
+			get => this.fullName;
+			protected internal set { this.fullName = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(FullName))); }
+		}
+		private Gender gender;
+		/// <summary>The user's gender, if they have it set.</summary>
+		public Gender Gender {
+			get => this.gender;
+			set { this.gender = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Gender))); }
+		}
+		private bool watched;
         /// <summary>True if the user is in our watch list.</summary>
-        public bool Watched { get; protected internal set; }
+		public bool Watched {
+            get => this.watched;
+            set { this.watched = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Watched))); }
+        }
+        private bool away;
         /// <summary>True if the user is marked as away.</summary>
-        public bool Away { get; protected internal set; }
+        public bool Away {
+            get => this.away;
+            set { this.away = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Away))); }
+        }
+        private string awayReason;
         /// <summary>The user's away message.</summary>
-        public string AwayReason { get; protected internal set; }
+        public string AwayReason {
+            get => this.awayReason;
+            set { this.awayReason = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(AwayReason))); }
+        }
+        private DateTime awaySince;
         /// <summary>The time when the user marked themselves away.</summary>
-        public DateTime AwaySince { get; protected internal set; }
+        public DateTime AwaySince {
+            get => this.awaySince;
+            set { this.awaySince = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(AwaySince))); }
+        }
+        private bool oper;
         /// <summary>True if the user is a server oper.</summary>
-        public bool Oper { get; protected internal set; }
+        public bool Oper {
+            get => this.oper;
+            set { this.oper = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Oper))); }
+        }
 
         /// <summary>Returns true if this user is the local user for its <see cref="IrcClient"/> object.</summary>
         public bool IsMe => (this.Client != null && this == this.Client.Me);
@@ -48,11 +92,14 @@ namespace AnIRC {
         /// <summary>A list of channels we share with this user</summary>
         public IrcChannelCollection Channels { get; internal set; }
 
+		public event PropertyChangedEventHandler PropertyChanged;
+		internal void OnPropertyChanged(PropertyChangedEventArgs e) => this.PropertyChanged?.Invoke(this, e);
+
         private int id;
         private static int nextId = -1;
 
-        /// <summary>Returns a gender-specific subject pronoun if this user's gender is known, or "They" if not.</summary>
-        public string GenderRefThey {
+		/// <summary>Returns a gender-specific subject pronoun if this user's gender is known, or "They" if not.</summary>
+		public string GenderRefThey {
             get {
                 switch (this.Gender) {
                     case Gender.Male: return "He";
@@ -140,7 +187,6 @@ namespace AnIRC {
         /// Determines whether two <see cref="IrcUser"/> objects are equal.
         /// </summary>
         /// <returns>True if the two user objects have the same hostmask; false otherwise.</returns>
-        // TODO: Perhaps we should compare on IrcClient and nickname only, not the full hostmask.
         public static bool operator ==(IrcUser user1, IrcUser user2) {
             if (ReferenceEquals(user1, null)) return ReferenceEquals(user2, null);
             if (ReferenceEquals(user2, null)) return false;

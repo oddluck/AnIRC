@@ -39,12 +39,37 @@ namespace AnIRC {
 
 	public class CapabilitiesAddedEventArgs : CapabilitiesEventArgs {
 		/// <summary>A set of names of capabilities that should be enabled.</summary>
-		public HashSet<string> EnableCapabilities { get; }
+		public ISet<string> EnableCapabilities { get; }
 
-		public CapabilitiesAddedEventArgs(IDictionary<string, IrcCapability> capabilities, HashSet<string> enableCapabilities)
+		public CapabilitiesAddedEventArgs(IDictionary<string, IrcCapability> capabilities, ISet<string> enableCapabilities)
 			: base(capabilities) {
 			this.EnableCapabilities = enableCapabilities;
 		}
+
+		/// <summary>Adds the specified capability to the list of capabilities to be enabled if it is supported by the server.</summary>
+		/// <returns>True if the capability is supported; false otherwise.</returns>
+		public bool EnableIfSupported(string name) {
+			if (this.Capabilities.ContainsKey(name)) {
+				this.EnableCapabilities.Add(name);
+				return true;
+			}
+			return false;
+		}
+		/// <summary>Adds those capabilities from the specified enumerable that are supported by the server to the list of capabilities to be enabled.</summary>
+		/// <returns>An <see cref="ISet{T}"/> of <see cref="string"/> containing names of capaibilities that were enabled.</returns>
+		public ISet<string> EnableIfSupported(IEnumerable<string> names) {
+			var enabled = new HashSet<string>();
+			foreach (var name in names) {
+				if (this.Capabilities.ContainsKey(name)) {
+					this.EnableCapabilities.Add(name);
+					enabled.Add(name);
+				}
+			}
+			return enabled;
+		}
+		/// <summary>Adds those capabilities from the specified array that are supported by the server to the list of capabilities to be enabled.</summary>
+		/// <returns>An <see cref="ISet{T}"/> of <see cref="string"/> containing names of capaibilities that were enabled.</returns>
+		public ISet<string> EnableIfSupported(params string[] names) => this.EnableIfSupported((IEnumerable<string>) names);
 	}
 
 	public class ChannelChangeEventArgs : EventArgs {

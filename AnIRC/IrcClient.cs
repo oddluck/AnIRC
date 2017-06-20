@@ -195,8 +195,10 @@ namespace AnIRC {
         public event EventHandler<PrivateMessageEventArgs> ServerNotice;
         /// <summary>Raised when the State property changes.</summary>
         public event EventHandler<StateEventArgs> StateChanged;
-        /// <summary>Raised when we lose sight of a user, but they did not leave the network.</summary>
-        public event EventHandler<IrcUserEventArgs> UserDisappeared;
+		/// <summary>Raised when a previously unseen user appears.</summary>
+		public event EventHandler<IrcUserEventArgs> UserAppeared;
+		/// <summary>Raised when we lose sight of a user, but they did not leave the network.</summary>
+		public event EventHandler<IrcUserEventArgs> UserDisappeared;
         /// <summary>Raised when user modes are received.</summary>
         public event EventHandler<UserModesEventArgs> UserModesGet;
         /// <summary>Raised when user modes are set.</summary>
@@ -325,7 +327,8 @@ namespace AnIRC {
         protected internal virtual void OnPrivateCTCP(PrivateMessageEventArgs e) => this.PrivateCTCP?.Invoke(this, e);
         protected internal virtual void OnPrivateMessage(PrivateMessageEventArgs e) => this.PrivateMessage?.Invoke(this, e);
         protected internal virtual void OnPrivateNotice(PrivateMessageEventArgs e) => this.PrivateNotice?.Invoke(this, e);
-        protected internal virtual void OnUserDisappeared(IrcUserEventArgs e) => this.UserDisappeared?.Invoke(this, e);
+		protected internal virtual void OnUserAppeared(IrcUserEventArgs e) => this.UserAppeared?.Invoke(this, e);
+		protected internal virtual void OnUserDisappeared(IrcUserEventArgs e) => this.UserDisappeared?.Invoke(this, e);
         protected internal virtual void OnUserQuit(QuitEventArgs e) => this.UserQuit?.Invoke(this, e);
         protected internal virtual void OnRawLineReceived(IrcLineEventArgs e) => this.RawLineReceived?.Invoke(this, e);
         protected internal virtual void OnRawLineUnhandled(IrcLineEventArgs e) => this.RawLineUnhandled?.Invoke(this, e);
@@ -337,7 +340,7 @@ namespace AnIRC {
         protected internal virtual void OnServerNotice(PrivateMessageEventArgs e) => this.ServerNotice?.Invoke(this, e);
         protected internal virtual void OnServerError(ServerErrorEventArgs e) => this.ServerError?.Invoke(this, e);
         protected internal virtual void OnStateChanged(StateEventArgs e) {
-            if (e.NewState >= IrcClientState.ReceivingServerInfo && e.OldState < IrcClientState.ReceivingServerInfo)
+            if (e.NewState >= IrcClientState.ReceivingServerInfo && e.OldState < IrcClientState.ReceivingServerInfo && !this.Users.Contains(this.Me.Nickname))
                 this.Users.Add(this.Me);
 
             this.StateChanged?.Invoke(this, e);
@@ -446,6 +449,7 @@ namespace AnIRC {
 		/// <summary>Stores <see cref="DisconnectReason"/> values that don't cause the connection to be closed immediately.</summary>
         protected internal DisconnectReason disconnectReason;
         internal bool accountKnown;  // Some servers send both 330 and 307 in WHOIS replies. We need to ignore the 307 in that case.
+		internal List<string> pendingCapabilities = new List<string>();
         internal Dictionary<string, HashSet<string>> pendingNames = new Dictionary<string, HashSet<string>>();
 
         /// <summary>Contains functions used to handle replies received from the server.</summary>
@@ -542,6 +546,9 @@ namespace AnIRC {
 
         /// <summary>Connects and logs in to an IRC network.</summary>
         public virtual void Connect(string host, int port) {
+			if (this.RequireSaslAuthentication && (this.SaslUsername == null || this.SaslPassword == null))
+				throw new InvalidOperationException("SASL authentication is required, but no credentials are given.");
+
             this.disconnectReason = 0;
             this.accountKnown = false;
 
