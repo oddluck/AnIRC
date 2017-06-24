@@ -53,11 +53,11 @@ namespace AnIRC {
 			get => this.gender;
 			set { this.gender = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Gender))); }
 		}
-		private bool watched;
+		private bool monitoring;
         /// <summary>True if the user is in our watch list.</summary>
-		public bool Watched {
-            get => this.watched;
-            set { this.watched = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Watched))); }
+		public bool Monitoring {
+            get => this.monitoring;
+            set { this.monitoring = value; this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(Monitoring))); }
         }
         private bool away;
         /// <summary>True if the user is marked as away.</summary>
@@ -86,8 +86,8 @@ namespace AnIRC {
 
         /// <summary>Returns true if this user is the local user for its <see cref="IrcClient"/> object.</summary>
         public bool IsMe => (this.Client != null && this == this.Client.Me);
-        /// <summary>Returns true if this user is in our watch list or in a common channel with us.</summary>
-        public bool IsSeen => (this.Watched || this.Channels.Count != 0);
+        /// <summary>Returns true if this user is in our monitor list or in a common channel with us.</summary>
+        public bool IsSeen => (this.Monitoring || this.Channels.Count != 0);
 
         /// <summary>A list of channels we share with this user</summary>
         public IrcChannelCollection Channels { get; internal set; }

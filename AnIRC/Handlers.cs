@@ -467,7 +467,7 @@ namespace AnIRC {
 
         [IrcMessageHandler(Replies.RPL_GONEAWAY)]
         public static void HandleWatchAway(IrcClient client, IrcLine line) {  // 598
-            if (client.Extensions.SupportsWatch) {
+            if (client.Extensions.SupportsMonitor) {
                 IrcUser user;
                 if (client.Users.TryGetValue(line.Parameters[1], out user)) {
                     user.Away = true;
@@ -479,7 +479,7 @@ namespace AnIRC {
 
         [IrcMessageHandler(Replies.RPL_NOTAWAY)]
         public static void HandleWatchBack(IrcClient client, IrcLine line) {  // 599
-            if (client.Extensions.SupportsWatch) {
+            if (client.Extensions.SupportsMonitor) {
                 IrcUser user;
                 if (client.Users.TryGetValue(line.Parameters[1], out user)) {
                     user.Away = false;
@@ -489,10 +489,10 @@ namespace AnIRC {
 
         [IrcMessageHandler(Replies.RPL_WATCHOFF)]
         public static void HandleWatchRemoved(IrcClient client, IrcLine line) {  // 602
-            if (client.Extensions.SupportsWatch) {
+            if (client.Extensions.SupportsMonitor) {
                 IrcUser user;
                 if (client.Users.TryGetValue(line.Parameters[1], out user)) {
-                    user.Watched = false;
+                    user.Monitoring = false;
                     if (user.Channels.Count == 0) {
                         client.Users.Remove(line.Parameters[1]);
                         client.OnUserDisappeared(new IrcUserEventArgs(user));
@@ -504,32 +504,66 @@ namespace AnIRC {
         [IrcMessageHandler(Replies.RPL_LOGON)]
         [IrcMessageHandler(Replies.RPL_NOWON)]
         public static void HandleWatchOnline(IrcClient client, IrcLine line) {  // 600, 604
-            if (client.Extensions.SupportsWatch) {
-                IrcUser user;
-                if (client.Users.TryGetValue(line.Parameters[1], out user))
-                    user.Watched = true;
-                else
-                    client.Users.Add(new IrcUser(client, line.Parameters[1], line.Parameters[2], line.Parameters[3], null, null) { Watched = true });
-            }
+            if (client.Extensions.SupportsMonitor) {
+				client.MonitorList.addInternal(line.Parameters[1]);
+				var user = client.Users.GetFromMonitor(line.Parameters[1], line.Parameters[2], line.Parameters[3], true);
+				user.Monitoring = true;
+				client.OnMonitorOnline(new IrcUserEventArgs(user));
+			}
         }
 
         [IrcMessageHandler(Replies.RPL_LOGOFF)]
         [IrcMessageHandler(Replies.RPL_NOWOFF)]
         public static void HandleWatchOffline(IrcClient client, IrcLine line) {  // 601, 605
-            if (client.Extensions.SupportsWatch) {
-                IrcUser user;
-                if (client.Users.TryGetValue(line.Parameters[1], out user) && user.Channels.Count == 0) {
-                    // Some IRC servers send RPL_LOGOFF before the QUIT message.
-                    user.Watched = false;
-                    client.Users.Remove(line.Parameters[1]);
-                    client.OnUserQuit(new QuitEventArgs(user, null));
-                }
-            }
+            if (client.Extensions.SupportsMonitor) {
+				client.MonitorList.addInternal(line.Parameters[1]);
+
+				if (client.Users.TryGetValue(line.Parameters[1], out var user)) {
+					user.Monitoring = false;
+					if (!user.IsSeen) {
+						client.Users.Remove(line.Parameters[1]);
+						client.OnUserQuit(new QuitEventArgs(user, null));
+					}
+				} else
+					user = new IrcUser(client, line.Parameters[1], line.Parameters[2], line.Parameters[3], null, null);
+				client.OnMonitorOffline(new IrcUserEventArgs(user));
+			}
         }
 
-        [IrcMessageHandler(Replies.RPL_NOWISAWAY)]
+		[IrcMessageHandler(Replies.RPL_WATCHLIST)]
+		public static void HandleWatchList(IrcClient client, IrcLine line) {  // 606
+			if (client.Extensions.SupportsMonitor) {
+				if (client.pendingMonitor == null) {
+					// We'll use this field to 'check off' nicknames that are still in the list.
+					client.pendingMonitor = new HashSet<string>(client.MonitorList);
+				}
+				var nicknames = from mask in line.Parameters[1].Split(' ') select Hostmask.GetNickname(mask);
+				foreach (var nickname in nicknames) {
+					var result = client.pendingMonitor.Remove(nickname);
+					if (!result) {
+						// This nickname was not known.
+						// TODO: it may still be unknown whether or not the user is online. `MONITOR S` may be required to verify this.
+						client.MonitorList.addInternal(nickname);
+					}
+				}
+			}
+		}
+
+		[IrcMessageHandler(Replies.RPL_ENDOFWATCHLIST)]
+		public static void HandleWatchListEnd(IrcClient client, IrcLine line) {  // 607
+			if (client.Extensions.SupportsMonitor) {
+				// If any nicknames remain in this list, they are missing from the monitor list.
+				// Null `client.MonitorList` means that we just received an empty list.
+				foreach (var nickname in (IEnumerable<string>) client.pendingMonitor ?? client.MonitorList.ToArray()) {
+					client.MonitorList.removeInternal(nickname);
+				}
+				client.pendingMonitor = null;
+			}
+		}
+
+		[IrcMessageHandler(Replies.RPL_NOWISAWAY)]
         public static void HandleWatchIsAway(IrcClient client, IrcLine line) {  // 609
-            if (client.Extensions.SupportsWatch) {
+            if (client.Extensions.SupportsMonitor) {
                 IrcUser user;
                 if (client.Users.TryGetValue(line.Parameters[1], out user)) {
                     user.Away = true;
@@ -539,7 +573,84 @@ namespace AnIRC {
             }
         }
 
-        [IrcMessageHandler(Replies.RPL_LOGGEDIN)]
+		[IrcMessageHandler(Replies.RPL_MONONLINE)]
+		public static void HandleMonitorOnline(IrcClient client, IrcLine line) {  // 730
+			if (client.Extensions.SupportsMonitor) {
+				var masks = line.Parameters[1].Split(',');
+				foreach (var mask in masks) {
+					var nickname = Hostmask.GetNickname(mask);
+					client.MonitorList.addInternal(nickname);
+					var user = client.Users.GetFromMonitor(mask, true);
+					user.Monitoring = true;
+					client.OnMonitorOnline(new IrcUserEventArgs(user));
+				}
+			}
+		}
+
+		[IrcMessageHandler(Replies.RPL_MONOFFLINE)]
+		public static void HandleMonitorOffline(IrcClient client, IrcLine line) {  // 731
+			if (client.Extensions.SupportsMonitor) {
+				var nicknames = line.Parameters[1].Split(',');
+				foreach (var nickname in nicknames)
+					client.MonitorList.addInternal(nickname);
+				foreach (var nickname in nicknames) {
+					if (client.Users.TryGetValue(nickname, out var user)) {
+						user.Monitoring = false;
+						if (!user.IsSeen) {
+							client.Users.Remove(nickname);
+							client.OnUserQuit(new QuitEventArgs(user, null));
+						}
+					} else
+						user = new IrcUser(client, nickname, "*", "*", null, null);
+					client.OnMonitorOffline(new IrcUserEventArgs(user));
+				}
+			}
+		}
+
+		[IrcMessageHandler(Replies.RPL_MONLIST)]
+		public static void HandleMonitorList(IrcClient client, IrcLine line) {  // 732
+			if (client.Extensions.SupportsMonitor) {
+				if (client.pendingMonitor == null) {
+					// We'll use this field to 'check off' nicknames that are still in the list.
+					client.pendingMonitor = new HashSet<string>(client.MonitorList);
+				}
+				var nicknames = line.Parameters[1].Split(',');
+				foreach (var nickname in nicknames) {
+					var result = client.pendingMonitor.Remove(nickname);
+					if (!result) {
+						// This nickname was not known.
+						// TODO: it may still be unknown whether or not the user is online. `MONITOR S` may be required to verify this.
+						client.MonitorList.addInternal(nickname);
+					}
+				}
+			}
+		}
+
+		[IrcMessageHandler(Replies.RPL_ENDOFMONLIST)]
+		public static void HandleMonitorListEnd(IrcClient client, IrcLine line) {  // 733
+			if (client.Extensions.SupportsMonitor) {
+				// If any nicknames remain in this list, they are missing from the monitor list.
+				// Null `client.MonitorList` means that we just received an empty list.
+				foreach (var nickname in (IEnumerable<string>) client.pendingMonitor ?? client.MonitorList.ToArray()) {
+					client.MonitorList.removeInternal(nickname);
+				}
+				client.pendingMonitor = null;
+			}
+		}
+
+		[IrcMessageHandler(Replies.RPL_MONLISTFULL)]
+		public static void HandleMonitorListFull(IrcClient client, IrcLine line) {  // 734
+			if (client.Extensions.SupportsMonitor) {
+				client.Extensions["MONITOR"] = line.Parameters[1];
+				var nicknames = line.Parameters[2].Split(',');
+				foreach (var nickname in nicknames) {
+					client.MonitorList.removeInternal(nickname);
+				}
+			}
+		}
+
+
+		[IrcMessageHandler(Replies.RPL_LOGGEDIN)]
         public static void HandleLoggedIn(IrcClient client, IrcLine line) {  // 900
             client.Me.Account = line.Parameters[2];
         }
@@ -738,7 +849,7 @@ namespace AnIRC {
 
             if (line.Parameters.Length == 3) {
                 // Extended join
-                user = client.Users.Get(line.Prefix, line.Parameters[1], line.Parameters[2], onChannel);
+                user = client.Users.GetFromExtendedJoin(line.Prefix, line.Parameters[1], line.Parameters[2], onChannel);
             } else
                 user = client.Users.Get(line.Prefix, onChannel);
 

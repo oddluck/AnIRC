@@ -38,11 +38,12 @@ namespace AnIRC {
         public bool SupportsInviteExceptions { get; protected internal set; }
         /// <summary>The RPL_ISUPPORT specification of the mode character used for channel invite exceptions.</summary>
         public char InviteExceptionsMode { get; protected internal set; }
-        /// <summary>True if the server supports the WATCH command.</summary>
-        /// <remarks>If true, we will use the WATCH list to monitor users in the Users list.</remarks>
-        public bool SupportsWatch { get; protected internal set; }
-        /// <summary>The RPL_ISUPPORT specification of the maximum length of a kick message.</summary>
-        public int KickMessageLength { get; protected internal set; } = 500;
+		/// <summary>The maximum number of entries allowed in the MONITOR or WATCH list, zero if neither is supported, or int.MaxValue if there is no limit.</summary>
+		public int MonitorLimit { get; protected internal set; }
+		/// <summary>True if the server supports the MONITOR or WATCH command.</summary>
+		public bool SupportsMonitor => this.MonitorLimit > 0;
+		/// <summary>The RPL_ISUPPORT specification of the maximum length of a kick message.</summary>
+		public int KickMessageLength { get; protected internal set; } = 500;
         /// <summary>The RPL_ISUPPORT specification of the maximum number of entries that may be added to a channel list mode.</summary>
         /// <remarks>Each key contains one of more mode characters, and the corresponding value is the limit for all of those modes combined.</remarks>
         public ReadOnlyDictionary<string, int> ListModeLength { get; protected internal set; }
@@ -186,7 +187,14 @@ namespace AnIRC {
                         }
                         break;
                     case "MODES": this.Modes = (value == null ? 3 : int.Parse(value)); break;
-                    case "NETWORK": this.NetworkName = value; break;
+					case "MONITOR":
+						if (value != null) {
+							this.MonitorLimit = (value == "" ? int.MaxValue : int.Parse(value));
+						} else {
+							this.MonitorLimit = this.ContainsKey("WATCH") ? int.MaxValue : 0;
+						}
+						break;
+					case "NETWORK": this.NetworkName = value; break;
                     case "NICKLEN": this.NicknameLength = (value == null ? 9 : int.Parse(value)); break;
                     case "PREFIX":
                         this.statusPrefix.Clear();
@@ -229,7 +237,12 @@ namespace AnIRC {
                         }
                         break;
                     case "TOPICLEN": this.TopicLength = (string.IsNullOrEmpty(value) ? int.MaxValue : int.Parse(value)); break;
-                    case "WATCH": this.SupportsWatch = (value != null); break;
+                    case "WATCH":
+						if (!this.ContainsKey("MONITOR")) {
+							if (value != null) this.MonitorLimit = int.MaxValue;
+							else this.MonitorLimit = 0;
+						}
+						break;
                 }
             }
         }

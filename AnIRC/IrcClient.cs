@@ -155,6 +155,10 @@ namespace AnIRC {
         public event EventHandler<InviteSentEventArgs> InviteSent;
         /// <summary>Raised when the local user is killed.</summary>
         public event EventHandler<PrivateMessageEventArgs> Killed;
+		/// <summary>Raised after the <see cref="UserQuit"/> or <see cref="NicknameChange"/> event when a user on the monitor list goes offline or changes their nickname.</summary>
+		public event EventHandler<IrcUserEventArgs> MonitorOffline;
+		/// <summary>Raised after the <see cref="UserAppeared"/> event when a user on the monitor list appears online.</summary>
+		public event EventHandler<IrcUserEventArgs> MonitorOnline;
         /// <summary>Raised when part of the MOTD is seen.</summary>
         public event EventHandler<MotdEventArgs> MOTD;
         /// <summary>Raised when part of a channel names list is seen.</summary>
@@ -294,6 +298,7 @@ namespace AnIRC {
             this.UserModes.Clear();
 			this.supportedCapabilities.Clear();
 			this.enabledCapabilities.Clear();
+			this.MonitorList.clearInternal();
 			this.Disconnected?.Invoke(this, e);
 
             // Fail async requests.
@@ -314,7 +319,9 @@ namespace AnIRC {
         protected internal virtual void OnInviteExemptList(ChannelModeListEventArgs e) => this.ChannelInviteExemptList?.Invoke(this, e);
         protected internal virtual void OnInviteExemptListEnd(ChannelModeListEndEventArgs e) => this.ChannelInviteExemptListEnd?.Invoke(this, e);
         protected internal virtual void OnKilled(PrivateMessageEventArgs e) => this.Killed?.Invoke(this, e);
-        protected internal virtual void OnMotd(MotdEventArgs e) => this.MOTD?.Invoke(this, e);
+		protected internal virtual void OnMonitorOffline(IrcUserEventArgs e) => this.MonitorOffline?.Invoke(this, e);
+		protected internal virtual void OnMonitorOnline(IrcUserEventArgs e) => this.MonitorOnline?.Invoke(this, e);
+		protected internal virtual void OnMotd(MotdEventArgs e) => this.MOTD?.Invoke(this, e);
         protected internal virtual void OnNames(ChannelNamesEventArgs e) => this.Names?.Invoke(this, e);
         protected internal virtual void OnNamesEnd(ChannelModeListEndEventArgs e) => this.NamesEnd?.Invoke(this, e);
         protected internal virtual void OnNicknameChange(NicknameChangeEventArgs e) => this.NicknameChange?.Invoke(this, e);
@@ -427,6 +434,9 @@ namespace AnIRC {
         /// <summary>Returns or sets the text encoding used to interpret data.</summary>
         public Encoding Encoding { get; set; }
 
+		/// <summary>If the MONITOR or WATCH command is supported, returns a <see cref="AnIRC.MonitorList"/> instance that can be used to manipulate the monitor list.</summary>
+		public MonitorList MonitorList { get; }
+
         private List<AsyncRequest> asyncRequests = new List<AsyncRequest>();
 		/// <summary>Returns the list of pending async requests for this <see cref="IrcClient"/>.</summary>
         public ReadOnlyCollection<AsyncRequest> AsyncRequests;
@@ -451,9 +461,10 @@ namespace AnIRC {
         internal bool accountKnown;  // Some servers send both 330 and 307 in WHOIS replies. We need to ignore the 307 in that case.
 		internal List<string> pendingCapabilities = new List<string>();
         internal Dictionary<string, HashSet<string>> pendingNames = new Dictionary<string, HashSet<string>>();
+		internal HashSet<string> pendingMonitor;
 
-        /// <summary>Contains functions used to handle replies received from the server.</summary>
-        protected internal Dictionary<string, IrcMessageHandler> MessageHandlers = new Dictionary<string, IrcMessageHandler>(StringComparer.OrdinalIgnoreCase);
+		/// <summary>Contains functions used to handle replies received from the server.</summary>
+		protected internal Dictionary<string, IrcMessageHandler> MessageHandlers = new Dictionary<string, IrcMessageHandler>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Creates a new IRCClient object with no network name and the default encoding and ping timeout.</summary>
         /// <param name="localUser">An IRCLocalUser instance to represent the local user.</param>
@@ -479,6 +490,7 @@ namespace AnIRC {
 			this.EnabledCapabilities = new ReadOnlyDictionary<string, IrcCapability>(this.enabledCapabilities);
             this.Users = new IrcUserCollection(this);
             this.Encoding = encoding ?? new UTF8Encoding(false, false);
+			this.MonitorList = new MonitorList(this);
             this.AsyncRequests = this.asyncRequests.AsReadOnly();
 
             this.Me = localUser;
@@ -1060,6 +1072,8 @@ namespace AnIRC {
                 channel.Users = new IrcChannelUserCollection(this);
                 foreach (var user in oldChannelUsers) channel.Users.Add(user);
             }
+
+			this.MonitorList.setCaseMapping();
         }
 
         /// <summary>Searches the users on a channel for those matching a specified hostmask.</summary>

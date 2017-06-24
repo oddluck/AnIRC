@@ -31,27 +31,28 @@ namespace AnIRC {
         internal bool Remove(IrcUser user) => this.Users.Remove(user.Nickname);
         internal void Clear() => this.Users.Clear();
 
-		/// <summary>Returns the <see cref="IrcUser"/> object representing the channel with the specified name, creating one if necessary.</summary>
-		internal IrcUser Get(string mask, bool add) => this.Get(mask, null, null, add);
+		internal IrcUser Get(string mask, bool add)
+			=> this.Get(Hostmask.GetNickname(mask), Hostmask.GetIdent(mask), Hostmask.GetHost(mask), null, null, false, add);
+		internal IrcUser GetFromExtendedJoin(string mask, string account, string fullName, bool add)
+			=> this.Get(Hostmask.GetNickname(mask), Hostmask.GetIdent(mask), Hostmask.GetHost(mask), account, fullName, false, add);
+		internal IrcUser Get(string nickname, string ident, string host, bool add)
+			=> this.Get(nickname, ident, host, null, null, false, add);
+		internal IrcUser GetFromMonitor(string mask, bool add)
+			=> this.Get(Hostmask.GetNickname(mask), Hostmask.GetIdent(mask), Hostmask.GetHost(mask), null, null, true, add);
+		internal IrcUser GetFromMonitor(string nickname, string ident, string host, bool add)
+			=> this.Get(nickname, ident, host, null, null, true, add);
 		/// <summary>
-		/// Returns the <see cref="IrcUser"/> object representing the channel with the specified name, creating one if necessary,
-		/// and sets its details to the specified ones (from extended-join).
+		/// Returns the <see cref="IrcUser"/> object representing the user with the specified nickname, creating one if necessary,
+		/// and updates its details with the specified ones.
 		/// </summary>
-		internal IrcUser Get(string mask, string account, string fullName, bool add) {
-            IrcUser user;
-            string nickname; string ident; string host;
-
-            nickname = Hostmask.GetNickname(mask);
-            ident = Hostmask.GetIdent(mask);
-            host = Hostmask.GetHost(mask);
-
-            if (this.TryGetValue(nickname, out user)) {
+		internal IrcUser Get(string nickname, string ident, string host, string account, string fullName, bool monitoring, bool add) {
+            if (this.TryGetValue(nickname, out var user)) {
                 if (ident != "*") user.Ident = ident;
                 if (host != "*") user.Host = host;
                 if (account != null) user.Account = (account == "*" ? null : account);
                 if (fullName != null) user.FullName = fullName;
             } else {
-                user = new IrcUser(this.Client, nickname, ident, host, (account == "*" ? null : account), fullName);
+				user = new IrcUser(this.Client, nickname, ident, host, (account == "*" ? null : account), fullName) { Monitoring = monitoring };
 				if (add) {
 					this.Add(user);
 					this.Client.OnUserAppeared(new IrcUserEventArgs(user));
@@ -61,8 +62,8 @@ namespace AnIRC {
             return user;
         }
 
-        /// <summary>Determines whether a user with the specified nickname is in this list.</summary>
-        public bool Contains(string nickname) => this.Users.ContainsKey(nickname);
+		/// <summary>Determines whether a user with the specified nickname is in this list.</summary>
+		public bool Contains(string nickname) => this.Users.ContainsKey(nickname);
 
         /// <summary>Attempts to get the user with the specified nickname and returns a value indicating whether they were found.</summary>
         /// <param name="nickname">The nickname to search for.</param>
