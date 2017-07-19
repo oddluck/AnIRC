@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -281,7 +282,6 @@ namespace AnIRC {
 		public Task<WhoisResponse> WhoisAsync() => this.Client.WhoisAsync(this.Nickname);
 
 		/// <summary>Asynchronously looks up the services account name of the specified user.</summary>
-		// TODO: WHOX support
 		public Task<string> GetAccountAsync() => this.GetAccountAsync(false);
 		/// <summary>Asynchronously looks up the services account name of the specified user.</summary>
 		/// <param name="force">If true, a request will be sent even if an account name is already known.</param>
@@ -290,9 +290,14 @@ namespace AnIRC {
 
             if (!force && this.Account != null) return this.Account;
 
-            var response = await this.WhoisAsync();
-            return response.Account;
-        }
+			if (this.Client.Extensions.SupportsWhox) {
+				var response = await this.Client.WhoxAsync(this.nickname, "100", WhoxField.QueryType, WhoxField.Nickname, WhoxField.Account);
+				return response.SingleOrDefault()?.Account;
+			} else {
+				var response = await this.WhoisAsync();
+				return response.Account;
+			}
+		}
     }
 
     /// <summary>

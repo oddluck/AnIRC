@@ -665,7 +665,19 @@ namespace AnIRC {
         }
     }
 
-    public class WhoisAuthenticationEventArgs : EventArgs {
+	public class WhoxListEventArgs : EventArgs {
+		/// <summary>Returns the parameters, excluding the recipient's nickname, in the reply.</summary>
+		public IReadOnlyList<string> Parameters { get; }
+		/// <summary>Set the values in this array to specify the type of the fields in the reply. This allows AnIRC to process them.</summary>
+		public WhoxField[] Fields { get; }
+
+		public WhoxListEventArgs(IReadOnlyList<string> parameters) {
+			this.Parameters = parameters;
+			this.Fields = new WhoxField[parameters.Count];
+		}
+	}
+
+	public class WhoisAuthenticationEventArgs : EventArgs {
 		/// <summary>Returns the nickname of the user that this message refers to.</summary>
         public string Nickname { get; set; }
 		/// <summary>Returns the user's services account name, or null if the user is not identified with services.</summary>

@@ -237,10 +237,12 @@ namespace AnIRC {
         public event EventHandler<WhoisEndEventArgs> WhoWasEnd;
         /// <summary>Raised when a WHOWAS name line is received.</summary>
         public event EventHandler<WhoisNameEventArgs> WhoWasNameLine;
-        #endregion
+		/// <summary>Raised when a WHOX list entry is received.</summary>
+		public event EventHandler<WhoxListEventArgs> WhoxList;
+		#endregion
 
-        #region Event methods
-        protected internal virtual void OnAwayCancelled(AwayEventArgs e) => this.AwayCancelled?.Invoke(this, e);
+		#region Event methods
+		protected internal virtual void OnAwayCancelled(AwayEventArgs e) => this.AwayCancelled?.Invoke(this, e);
         protected internal virtual void OnAwayMessage(AwayMessageEventArgs e) => this.AwayMessage?.Invoke(this, e);
         protected internal virtual void OnAwaySet(AwayEventArgs e) => this.AwaySet?.Invoke(this, e);
 		protected internal virtual void OnCapabilitiesAdded(CapabilitiesAddedEventArgs e) => this.CapabilitiesAdded?.Invoke(this, e);
@@ -353,7 +355,6 @@ namespace AnIRC {
             this.StateChanged?.Invoke(this, e);
         }
         protected internal virtual void OnValidateCertificate(ValidateCertificateEventArgs e) => this.ValidateCertificate?.Invoke(this, e);
-        protected internal virtual void OnWhoList(WhoListEventArgs e) => this.WhoList?.Invoke(this, e);
         protected internal virtual void OnWhoIsAuthenticationLine(WhoisAuthenticationEventArgs e) => this.WhoIsAuthenticationLine?.Invoke(this, e);
         protected internal virtual void OnWhoIsChannelLine(WhoisChannelsEventArgs e) => this.WhoIsChannelLine?.Invoke(this, e);
         protected internal virtual void OnWhoIsEnd(WhoisEndEventArgs e) => this.WhoIsEnd?.Invoke(this, e);
@@ -363,13 +364,15 @@ namespace AnIRC {
         protected internal virtual void OnWhoIsHelperLine(WhoisOperEventArgs e) => this.WhoIsHelperLine?.Invoke(this, e);
         protected internal virtual void OnWhoIsRealHostLine(WhoisRealHostEventArgs e) => this.WhoIsRealHostLine?.Invoke(this, e);
         protected internal virtual void OnWhoIsServerLine(WhoisServerEventArgs e) => this.WhoIsServerLine?.Invoke(this, e);
-        protected internal virtual void OnWhoWasNameLine(WhoisNameEventArgs e) => this.WhoWasNameLine?.Invoke(this, e);
+		protected internal virtual void OnWhoList(WhoListEventArgs e) => this.WhoList?.Invoke(this, e);
+		protected internal virtual void OnWhoWasNameLine(WhoisNameEventArgs e) => this.WhoWasNameLine?.Invoke(this, e);
         protected internal virtual void OnWhoWasEnd(WhoisEndEventArgs e) => this.WhoWasEnd?.Invoke(this, e);
-        #endregion
+		protected internal virtual void OnWhoxList(WhoxListEventArgs e) => this.WhoxList?.Invoke(this, e);
+		#endregion
 
-        // Server information
-        /// <summary>The common name (address) of the server, to be checked against the the server's TLS certificate if TLS is used.</summary>
-        public string Address { get; set; }
+		// Server information
+		/// <summary>The common name (address) of the server, to be checked against the the server's TLS certificate if TLS is used.</summary>
+		public string Address { get; set; }
         /// <summary>The password to use when logging in, or null if no password is needed.</summary>
         public string Password { get; set; }
         /// <summary>The server's self-proclaimed name or address.</summary>
@@ -437,7 +440,8 @@ namespace AnIRC {
 		/// <summary>If the MONITOR or WATCH command is supported, returns a <see cref="AnIRC.MonitorList"/> instance that can be used to manipulate the monitor list.</summary>
 		public MonitorList MonitorList { get; }
 
-        private List<AsyncRequest> asyncRequests = new List<AsyncRequest>();
+        internal List<AsyncRequest> asyncRequests = new List<AsyncRequest>();
+
 		/// <summary>Returns the list of pending async requests for this <see cref="IrcClient"/>.</summary>
         public ReadOnlyCollection<AsyncRequest> AsyncRequests;
         private Timer asyncRequestTimer;
@@ -1218,6 +1222,55 @@ namespace AnIRC {
             this.Send("WHO " + query);
             return (Task<ReadOnlyCollection<WhoResponse>>) request.Task;
         }
+
+		/// <summary>Performs a WHOX request if supported.</summary>
+		public Task<ReadOnlyCollection<WhoResponse>> WhoxAsync(string query, string queryType, params WhoxField[] fields)
+			=> this.WhoxAsync(query, queryType, (IEnumerable<WhoxField>) fields);
+		/// <summary>Performs a WHOX request if supported.</summary>
+		public Task<ReadOnlyCollection<WhoResponse>> WhoxAsync(string query, string queryType, IEnumerable<WhoxField> fields) {
+			if (this.state < IrcClientState.ReceivingServerInfo) throw new InvalidOperationException("The client must be registered to perform a WHO request.");
+			if (!this.Extensions.SupportsWhox) throw new NotSupportedException("The server does not support the WHOX extension.");
+
+			var sortedFields = new SortedSet<WhoxField>(fields.Select(v => {
+				if (v <= 0 || v > WhoxField.FullName) throw new ArgumentException(nameof(fields) + " contains invalid values.", nameof(fields));
+				return v;
+			})).ToArray();
+
+			if (sortedFields.Length == 0) throw new ArgumentException("Cannot request no fields with WHOX.", nameof(fields));
+			if (sortedFields[0] == WhoxField.QueryType && queryType == null)
+				throw new ArgumentException("A query type string must be provided with a WHOX request that includes the query type.", nameof(queryType));
+
+			var request = new AsyncRequest.WhoxAsyncRequest(this, query, queryType, sortedFields);
+			this.AddAsyncRequest(request);
+
+			var requestBuilder = new StringBuilder();
+			requestBuilder.Append("WHO ");
+			requestBuilder.Append(query);
+			requestBuilder.Append(" %");
+			foreach (var t in sortedFields) {
+				switch (t) {
+					case WhoxField.QueryType: requestBuilder.Append('t'); break;
+					case WhoxField.Channel: requestBuilder.Append('c'); break;
+					case WhoxField.Ident: requestBuilder.Append('u'); break;
+					case WhoxField.IPAddress: requestBuilder.Append('i'); break;
+					case WhoxField.Host: requestBuilder.Append('h'); break;
+					case WhoxField.ServerName: requestBuilder.Append('s'); break;
+					case WhoxField.Nickname: requestBuilder.Append('n'); break;
+					case WhoxField.Flags: requestBuilder.Append('f'); break;
+					case WhoxField.HopCount: requestBuilder.Append('d'); break;
+					case WhoxField.IdleTime: requestBuilder.Append('l'); break;
+					case WhoxField.Account: requestBuilder.Append('a'); break;
+					case WhoxField.FullName: requestBuilder.Append('r'); break;
+				}
+			}
+			if (queryType != null) {
+				requestBuilder.Append(",");
+				requestBuilder.Append(queryType);
+			}
+			this.Send(requestBuilder.ToString());
+
+			return (Task<ReadOnlyCollection<WhoResponse>>) request.Task;
+		}
 
         /// <summary>Performs a WHOIS request on a nickname.</summary>
         /// <returns>A <see cref="Task"/> representing the status of the request. The <see cref="Task{TResult}.Result"/> represents the response to the request.</returns>

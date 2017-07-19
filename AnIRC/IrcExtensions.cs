@@ -65,9 +65,12 @@ namespace AnIRC {
         public ReadOnlyDictionary<string, int> MaxTargets { get; protected internal set; }
         /// <summary>The RPL_ISUPPORT specification of the maximum length of a channel topic.</summary>
         public int TopicLength { get; protected internal set; } = 501;
+		/// <summary>True if the server supports the WHOX command.</summary>
+		/// <remarks>If true, we will use the WATCH list to monitor users in the Users list.</remarks>
+		public bool SupportsWhox { get; protected internal set; }
 
-        /// <summary>Returns an <see cref="IrcExtensions"/> object with the default parameters.</summary>
-        public static IrcExtensions Default { get; } = new IrcExtensions(null, null);
+		/// <summary>Returns an <see cref="IrcExtensions"/> object with the default parameters.</summary>
+		public static IrcExtensions Default { get; } = new IrcExtensions(null, null);
 
         /// <summary>Returns true if all parameters have the default values.</summary>
         public bool IsDefault => this.Count == 0;
@@ -243,6 +246,7 @@ namespace AnIRC {
 							else this.MonitorLimit = 0;
 						}
 						break;
+					case "WHOX": this.SupportsWhox = (value != null); break;
                 }
             }
         }

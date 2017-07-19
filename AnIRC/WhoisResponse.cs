@@ -62,6 +62,8 @@ namespace AnIRC {
 		public string Ident { get; internal set; }
 		/// <summary>Returns the user's hostname.</summary>
 		public string Host { get; internal set; }
+		/// <summary>Returns the user's IP address. This will always be null except for WHOX replies.</summary>
+		public string IPAddress { get; internal set; }
 		/// <summary>Returns the name of the server that the user is connected to.</summary>
 		public string Server { get; internal set; }
 		/// <summary>Returns the user's nickname.</summary>
@@ -73,7 +75,11 @@ namespace AnIRC {
 		/// <summary>Returns a <see cref="ChannelStatus"/> object representing the status the user has on the channel specified by <see cref="Channel"/>.</summary>
         public ChannelStatus ChannelStatus { get; internal set; }
 		/// <summary>Returns the number of 'hops' between this server and the user's server.</summary>
-		public int HopCount { get; internal set; }
+		public int? HopCount { get; internal set; }
+		/// <summary>Returns the user's idle time in seconds. This will always be null except for WHOX replies.</summary>
+		public int? IdleTime { get; internal set; }
+		/// <summary>Returns the user's services account name. This will always be null except for WHOX replies.</summary>
+		public string Account { get; internal set; }
 		/// <summary>Returns the user's full name.</summary>
 		public string FullName { get; internal set; }
     }

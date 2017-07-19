@@ -254,6 +254,140 @@ namespace AnIRC {
 		}
 
 		/// <summary>
+		/// An <see cref="AsyncRequest"/> that listens for a WHOX response.
+		/// </summary>
+		public class WhoxAsyncRequest : AsyncRequest {
+			private static Dictionary<string, bool> replies = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase) {
+                // Successful replies
+                { RPL_WHOSPCRPL, false },
+				{ RPL_ENDOFWHO, true },
+
+                // Error replies
+                { ERR_NOSUCHSERVER, true },
+				{ ERR_NOSUCHCHANNEL, true },
+			};
+
+			private IrcClient client;
+			private WhoxField[] fields;
+			public ReadOnlyCollection<WhoxField> Fields { get; }
+			private List<WhoResponse> responses = new List<WhoResponse>();
+			public ReadOnlyCollection<WhoResponse> Responses { get; }
+
+			private TaskCompletionSource<ReadOnlyCollection<WhoResponse>> taskSource { get; } = new TaskCompletionSource<ReadOnlyCollection<WhoResponse>>();
+			public string Target { get; }
+			public string QueryType { get; }
+			/// <summary>Returns a <see cref="Task{TResult}"/> of <see cref="ReadOnlyCollection{T}"/> of <see cref="WhoResponse"/> representing the status of the request.</summary>
+			public override Task Task => this.taskSource.Task;
+
+			/// <summary>Initializes a new <see cref="WhoAsyncRequest"/> for the specified channel, associated with the specified <see cref="IrcClient"/>.</summary>
+			public WhoxAsyncRequest(IrcClient client, string target, string queryType, params WhoxField[] fields) : this(client, target, queryType, (IList<WhoxField>) fields) { }
+			/// <summary>Initializes a new <see cref="WhoAsyncRequest"/> for the specified channel, associated with the specified <see cref="IrcClient"/>.</summary>
+			public WhoxAsyncRequest(IrcClient client, string target, string queryType, IList<WhoxField> fields) : base(replies, null) {
+				if (queryType != null) {
+					if (queryType == "")
+						throw new ArgumentException("Query type string cannot be empty.", nameof(queryType));
+					if (queryType[0] == ':' || queryType.Contains(" "))
+						throw new ArgumentException("Query type string contains invalid characters.", nameof(queryType));
+				}
+
+				this.client = client;
+				this.Target = target;
+				this.QueryType = queryType;
+
+				this.fields = fields.ToArray();
+				this.Fields = Array.AsReadOnly(this.fields);
+				this.Responses = this.responses.AsReadOnly();
+			}
+
+			protected internal override bool OnReply(IrcLine line, ref bool final) {
+				switch (line.Message) {
+					case RPL_WHOSPCRPL:
+						if (line.Parameters.Length != this.fields.Length + 1) return false;
+
+						var reply = new WhoResponse();
+
+						for (int i = line.Parameters.Length - 1; i >= 1; --i) {
+							switch (this.fields[i - 1]) {
+								case WhoxField.QueryType:
+									if (line.Parameters[i] != this.QueryType) return false;
+									break;
+								case WhoxField.Channel:
+									reply.Channel = line.Parameters[i];
+									break;
+								case WhoxField.Ident:
+									reply.Ident = line.Parameters[i];
+									break;
+								case WhoxField.Host:
+									reply.Host = line.Parameters[i];
+									break;
+								case WhoxField.IPAddress:
+									if (line.Parameters[i] != "255.255.255.255")
+										reply.IPAddress = line.Parameters[i];
+									break;
+								case WhoxField.ServerName:
+									reply.Server = line.Parameters[i];
+									break;
+								case WhoxField.Nickname:
+									reply.Nickname = line.Parameters[i];
+									break;
+								case WhoxField.Flags:
+									foreach (char flag in line.Parameters[i]) {
+										switch (flag) {
+											case 'G':
+												reply.Away = true;
+												break;
+											case '*':
+												reply.Oper = true;
+												break;
+											default:
+												if (client.Extensions.StatusPrefix.TryGetValue(flag, out char mode)) {
+													if (reply.ChannelStatus == null) reply.ChannelStatus = new ChannelStatus(this.client);
+													reply.ChannelStatus.Add(mode);
+												}
+												break;
+										}
+									}
+									break;
+								case WhoxField.HopCount:
+									if (line.Parameters[i] != "0")
+										reply.HopCount = int.Parse(line.Parameters[i]);
+									break;
+								case WhoxField.IdleTime:
+									if (line.Parameters[i] != "0")
+										reply.IdleTime = int.Parse(line.Parameters[i]);
+									break;
+								case WhoxField.Account:
+									if (line.Parameters[i] != "0")
+										reply.Account = line.Parameters[i];
+									break;
+								case WhoxField.FullName:
+									reply.FullName = line.Parameters[i];
+									break;
+							}
+						}
+
+						this.responses.Add(reply);
+						break;
+
+					case RPL_ENDOFWHO:
+						this.taskSource.SetResult(this.Responses);
+						final = true;
+						break;
+
+					case ERR_NOSUCHSERVER:
+					case ERR_NOSUCHCHANNEL:
+						this.taskSource.SetException(new AsyncRequestErrorException(line));
+						final = true;
+						break;
+				}
+
+				return true;
+			}
+
+			protected internal override void OnFailure(Exception exception) => this.taskSource.SetException(exception);
+		}
+
+		/// <summary>
 		/// An <see cref="AsyncRequest"/> that listens for a WHOIS response.
 		/// </summary>
 		/// <remarks>

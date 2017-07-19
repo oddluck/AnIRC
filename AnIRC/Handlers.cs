@@ -324,7 +324,7 @@ namespace AnIRC {
                 var match = Regex.Match(user.FullName, @"^\x03(\d\d?)\x0F");
                 if (match.Success) user.Gender = (Gender) (int.Parse(match.Groups[1].Value) & 3);
 
-                user.Oper = false;
+				var oper = false;
                 foreach (char flag in flags) {
                     char mode;
                     if (flag == 'H') {
@@ -336,11 +336,12 @@ namespace AnIRC {
                             user.AwaySince = DateTime.Now;
                         }
                     } else if (flag == '*')
-                        user.Oper = true;
+                        oper = true;
                     else if (channelUser != null && client.Extensions.StatusPrefix.TryGetValue(flag, out mode))
                         channelUser.Status.Add(mode);
                 }
-            }
+				if (user.Oper != oper) user.Oper = oper;
+			}
             client.OnWhoList(new WhoListEventArgs(channelName, ident, host, server, nickname, flags.ToCharArray(), hops, fullName));
         }
 
@@ -388,7 +389,84 @@ namespace AnIRC {
             client.OnNames(new ChannelNamesEventArgs(client.Channels.Get(line.Parameters[2]), line.Parameters[3]));
         }
 
-        [IrcMessageHandler(RPL_ENDOFNAMES)]
+		[IrcMessageHandler(Replies.RPL_WHOSPCRPL)]
+		public static void HandleWhoxReply(IrcClient client, IrcLine line) {  // 354
+			var parameters = line.Parameters.Skip(1).ToArray();
+			var e = new WhoxListEventArgs(parameters);
+
+			// If an async request has been added for this reply, we can find out the field types from that.
+			lock (client.asyncRequests) {
+				for (int i = 0; i < client.asyncRequests.Count; ++i) {
+					if (client.asyncRequests[i] is AsyncRequest.WhoxAsyncRequest) {
+						var asyncRequest = (AsyncRequest.WhoxAsyncRequest) client.asyncRequests[i];
+						if ((asyncRequest.QueryType == null || line.Parameters[1] == asyncRequest.QueryType) && asyncRequest.Fields.Count == line.Parameters.Length - 1) {
+							asyncRequest.Fields.CopyTo(e.Fields, 0);
+							break;
+						}
+					}
+				}
+			}
+
+			client.OnWhoxList(e);
+
+			int nicknameIndex = -1, channelIndex = -1;
+			for (int i = parameters.Length - 1; i >= 0; --i) {
+				if (e.Fields[i] == WhoxField.Nickname) {
+					nicknameIndex = i;
+				} else if (e.Fields[i] == WhoxField.Channel) {
+					channelIndex = i;
+				}
+			}
+			if (nicknameIndex < 0) return;  // We can't do anything else with the reply if we don't know the nickname.
+
+			var user = client.Users.Get(parameters[nicknameIndex], false);
+
+			IrcChannelUser channelUser;
+			if (channelIndex >= 0 && client.Channels.TryGetValue(parameters[channelIndex], out var channel))
+				channel.Users.TryGetValue(parameters[nicknameIndex], out channelUser);
+			else
+				channelUser = null;
+
+			if (user != null) {
+				for (int i = parameters.Length - 1; i >= 0; --i) {
+					switch (e.Fields[i]) {
+						case WhoxField.Ident:
+							user.Ident = parameters[i];
+							break;
+						case WhoxField.Host:
+							user.Host = parameters[i];
+							break;
+						case WhoxField.Flags:
+							var oper = false;
+							foreach (char flag in parameters[i]) {
+								char mode;
+								if (flag == 'H') {
+									user.Away = false;
+								} else if (flag == 'G') {
+									if (!user.Away) {
+										user.Away = true;
+										user.AwayReason = null;
+										user.AwaySince = DateTime.Now;
+									}
+								} else if (flag == '*')
+									oper = true;
+								else if (channelUser != null && client.Extensions.StatusPrefix.TryGetValue(flag, out mode))
+									channelUser.Status.Add(mode);
+							}
+							if (user.Oper != oper) user.Oper = oper;
+							break;
+						case WhoxField.Account:
+							user.Account = (parameters[i] == "0" ? null : parameters[i]);
+							break;
+						case WhoxField.FullName:
+							user.FullName = parameters[i];
+							break;
+					}
+				}
+			}
+		}
+
+		[IrcMessageHandler(RPL_ENDOFNAMES)]
         public static void HandleNamesEnd(IrcClient client, IrcLine line) {  // 366
             if (line.Parameters[1] != "*") {
                 IrcChannel channel; HashSet<string> pendingNames;
