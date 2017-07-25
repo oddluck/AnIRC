@@ -870,6 +870,8 @@ namespace AnIRC {
 								client.enabledCapabilities[capName] = cap;
 								capabilities.Add(capName, cap);
 								if (capName == "sasl") sasl = true;
+
+								break;
 							}
 						}
 					}
