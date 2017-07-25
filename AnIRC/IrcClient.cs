@@ -1272,20 +1272,31 @@ namespace AnIRC {
 			return (Task<ReadOnlyCollection<WhoResponse>>) request.Task;
 		}
 
-        /// <summary>Performs a WHOIS request on a nickname.</summary>
-        /// <returns>A <see cref="Task"/> representing the status of the request. The <see cref="Task{TResult}.Result"/> represents the response to the request.</returns>
-        public Task<WhoisResponse> WhoisAsync(string nickname) {
-            if (nickname == null) throw new ArgumentNullException(nameof(nickname));
-            if (this.state < IrcClientState.ReceivingServerInfo) throw new InvalidOperationException("The client must be registered to perform a WHOIS request.");
+		/// <summary>Performs a WHOIS request on a nickname.</summary>
+		/// <param name="nickname">The nickname to check.</param>
+		/// <returns>A <see cref="Task"/> representing the status of the request. The <see cref="Task{TResult}.Result"/> represents the response to the request.</returns>
+		public Task<WhoisResponse> WhoisAsync(string nickname) => this.WhoisAsync(null, nickname);
+		/// <summary>Performs a WHOIS request on a nickname.</summary>
+		/// <param name="nickname">The nickname to check.</param>
+		/// <param name="requestIdleTime">If true, the request will be addressed to the server that the target user is on.</param>
+		/// <returns>A <see cref="Task"/> representing the status of the request. The <see cref="Task{TResult}.Result"/> represents the response to the request.</returns>
+		public Task<WhoisResponse> WhoisAsync(string nickname, bool requestIdleTime) => this.WhoisAsync(requestIdleTime ? nickname : null, nickname);
+		/// <summary>Performs a WHOIS request on a nickname.</summary>
+		/// <param name="server">May be a server name to address that server, a nickname to address the server they are on, or null to address the server we are on.</param>
+		/// <param name="nickname">The nickname to check.</param>
+		/// <returns>A <see cref="Task"/> representing the status of the request. The <see cref="Task{TResult}.Result"/> represents the response to the request.</returns>
+		public Task<WhoisResponse> WhoisAsync(string server, string nickname) {
+			if (nickname == null) throw new ArgumentNullException(nameof(nickname));
+			if (this.state < IrcClientState.ReceivingServerInfo) throw new InvalidOperationException("The client must be registered to perform a WHOIS request.");
 
 			var request = this.AsyncRequests.FirstOrDefault(r => r is AsyncRequest.WhoisAsyncRequest && this.CaseMappingComparer.Equals(((AsyncRequest.WhoisAsyncRequest) r).Target, nickname));
 			if (request == null) {
 				request = new AsyncRequest.WhoisAsyncRequest(this, nickname);
 				this.AddAsyncRequest(request);
-				this.Send("WHOIS " + nickname);
+				this.Send("WHOIS " + (server != null ? server + " " : "") + nickname);
 			}
-            return (Task<WhoisResponse>) request.Task;
-        }
+			return (Task<WhoisResponse>) request.Task;
+		}
         #endregion
     }
 }

@@ -62,7 +62,6 @@
     <Compile Include="Replies.cs" />
     <Compile Include="WhoisResponse.cs" />
     <Compile Include="WhoxField.cs" />
-    <Compile Include="WhoxRequestType.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

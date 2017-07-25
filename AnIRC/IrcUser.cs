@@ -278,8 +278,14 @@ namespace AnIRC {
 			return (Task<string>) asyncRequest.Task;
 		}
 
-		/// <summary>Sends a WHOIS request to look up this user and awaits a reply.</summary>
-		public Task<WhoisResponse> WhoisAsync() => this.Client.WhoisAsync(this.Nickname);
+        /// <summary>Sends a WHOIS request to look up this user and awaits a reply.</summary>
+        public Task<WhoisResponse> WhoisAsync() => this.Client.WhoisAsync(null, this.Nickname);
+        /// <summary>Sends a WHOIS request to look up this user and awaits a reply.</summary>
+        /// <param name="requestIdleTime">If true, the request will be addressed to the server that the target user is on.</param>
+        public Task<WhoisResponse> WhoisAsync(bool requestIdleTime) => this.Client.WhoisAsync(requestIdleTime ? this.Nickname : null, this.Nickname);
+        /// <summary>Sends a WHOIS request to look up this user and awaits a reply.</summary>
+        /// <param name="server">May be a server name to address that server, a nickname to address the server they are on, or null to address the server we are on.</param>
+        public Task<WhoisResponse> WhoisAsync(string server) => this.Client.WhoisAsync(server, this.Nickname);
 
 		/// <summary>Asynchronously looks up the services account name of the specified user.</summary>
 		public Task<string> GetAccountAsync() => this.GetAccountAsync(false);
