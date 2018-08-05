@@ -1,4 +1,4 @@
-Ported to .Net Core 2.1 https://www.microsoft.com/net/download
+Ported to .Net Core 2.1 https://github.com/dotnet/core
 
 AnIRC
 =====
